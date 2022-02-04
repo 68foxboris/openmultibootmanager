@@ -1,3 +1,6 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
+from __future__ import print_function
 #############################################################################
 #
 # Copyright (C) 2014 Impex-Sat Gmbh & Co.KG
@@ -35,84 +38,25 @@ from OMBManagerLocale import _
 from enigma import eTimer
 
 import os
+from os import path
 import glob
 import struct
+from Components.Console import Console
+from Components.SystemInfo import BoxInfo
 
-try:
-	from boxbranding import *
-	BRANDING = True
-except:
-	BRANDING = False
-
-if BRANDING:
-	OMB_GETBOXTYPE = getBoxType()
-	OMB_GETBRANDOEM = getBrandOEM()
-	OMB_GETIMAGEDISTRO = getImageDistro()
-	OMB_GETIMAGEVERSION = getImageVersion()
-	OMB_GETIMAGEFILESYSTEM = getImageFileSystem() # needed
-	OMB_GETIMAGEFOLDER = getImageFolder() # needed
-	OMB_GETMACHINEMTDKERNEL = getMachineMtdKernel()
-	OMB_GETMACHINEKERNELFILE = getMachineKernelFile() # needed
-	OMB_GETMACHINEMTDROOT = getMachineMtdRoot()
-	OMB_GETMACHINEROOTFILE = getMachineRootFile() # needed
-	OMB_GETMACHINEMKUBIFS = getMachineMKUBIFS()
-	OMB_GETMACHINEUBINIZE = getMachineUBINIZE()
-	OMB_GETMACHINEBUILD = getMachineBuild()
-	OMB_GETMACHINEPROCMODEL = getMachineProcModel()
-	OMB_GETMACHINEBRAND = getMachineBrand()
-	OMB_GETMACHINENAME = getMachineName()
-	OMB_GETOEVERSION = getOEVersion()
-else:
-	OMB_GETIMAGEFILESYSTEM = "tar.bz2"
-	f = open("/proc/mounts", "r")
-	for line in f:
-		if line.find("rootfs") > -1:
-			if line.find("ubi") > -1:
-				OMB_GETIMAGEFILESYSTEM = "ubi"
-				break
-			if line.find("jffs2") > -1:
-				OMB_GETIMAGEFILESYSTEM = "jffs2"
-				break
-
-#
-# SAMPLE-DATA BOXBRANDING
-#
-# getMachineBuild=gbquadplus<
-# getMachineProcModel=gbquadplus<
-# getMachineBrand=GigaBlue<
-# getMachineName=Quad Plus<
-# getMachineMtdKernel=mtd2<
-# getMachineKernelFile=kernel.bin<
-# getMachineMtdRoot=mtd0<
-# getMachineRootFile=rootfs.bin<
-# getMachineMKUBIFS=-m 2048 -e 126976 -c 4000 -F<
-# getMachineUBINIZE=-m 2048 -p 128KiB<
-# getBoxType=gbquadplus<
-# getBrandOEM=gigablue<
-# getOEVersion=OE-Alliance 2.3<
-# getDriverDate=20140828<
-# getImageVersion=4.2<
-# getImageBuild=1<
-# getImageDistro=openmips<
-# getImageFolder=gigablue/quadplus<
-# getImageFileSystem=ubi<
-#
-
-OMB_DD_BIN = '/bin/dd'
-OMB_CP_BIN = '/bin/cp'
-OMB_RM_BIN = '/bin/rm'
-OMB_TAR_BIN = '/bin/tar'
-OMB_UBIATTACH_BIN = '/usr/sbin/ubiattach'
-OMB_UBIDETACH_BIN = '/usr/sbin/ubidetach'
-OMB_MOUNT_BIN = '/bin/mount'
-OMB_UMOUNT_BIN = '/bin/umount'
-OMB_MODPROBE_BIN = '/sbin/modprobe'
-OMB_RMMOD_BIN = '/sbin/rmmod'
-OMB_UNZIP_BIN = '/usr/bin/unzip'
-OMB_LOSETUP_BIN = '/sbin/losetup'
-OMB_ECHO_BIN = '/bin/echo'
-OMB_MKNOD_BIN = '/bin/mknod'
-OMB_UNJFFS2_BIN = '/usr/bin/unjffs2'
+OMB_GETBOXTYPE = BoxInfo.getItem("model")
+OMB_GETBRANDOEM = BoxInfo.getItem("brand")
+OMB_GETIMAGEDISTRO = BoxInfo.getItem("distro")
+OMB_GETIMAGEVERSION = BoxInfo.getItem("imageversion")
+OMB_GETIMAGEFILESYSTEM = BoxInfo.getItem("imagefs") # needed
+OMB_GETIMAGEFOLDER = BoxInfo.getItem("imagedir") # needed
+OMB_GETMACHINEMTDKERNEL = BoxInfo.getItem("mtdkernel")
+OMB_GETMACHINEKERNELFILE = BoxInfo.getItem("kernelfile") # needed
+OMB_GETMACHINEMTDBOOT = BoxInfo.getItem("mtdbootfs")
+OMB_GETMACHINEMTDROOT = BoxInfo.getItem("mtdrootfs")
+OMB_GETMACHINEROOTFILE = BoxInfo.getItem("rootfile") # needed
+OMB_GETMACHINEMKUBIFS = BoxInfo.getItem("mkubifs")
+OMB_GETMACHINEUBINIZE = BoxInfo.getItem("ubinize")
 
 
 class OMBManagerInstall(Screen):
@@ -229,7 +173,7 @@ class OMBManagerInstall(Screen):
 
 		tmp_folder = self.mount_point + '/' + OMB_TMP_DIR
 		if os.path.exists(tmp_folder):
-			os.system(OMB_RM_BIN + ' -rf ' + tmp_folder)
+			Console().ePopen("rm -rf %s" % tmp_folder)
 		try:
 			os.makedirs(tmp_folder)
 			os.makedirs(tmp_folder + '/ubi')
@@ -238,26 +182,42 @@ class OMBManagerInstall(Screen):
 			self.showError(_("Cannot create folder %s") % tmp_folder)
 			return
 
-		if os.system(OMB_UNZIP_BIN + ' ' + source_file + ' -d ' + tmp_folder) != 0:
+		if os.system('unzip ' + source_file + ' -d ' + tmp_folder) != 0:
 			self.showError(_("Cannot deflate image"))
 			return
 
 		nfifile = glob.glob('%s/*.nfi' % tmp_folder)
+		tarxzfile = glob.glob('%s/*.rootfs.tar.xz' % tmp_folder)
 		if nfifile:
 			if not self.extractImageNFI(nfifile[0], tmp_folder):
 				self.showError(_("Cannot extract nfi image"))
 				return
 			else:
-				os.system(OMB_RM_BIN + ' -f ' + source_file)
+				Console().ePopen("rm -f %s" % source_file)
 				self.afterInstallImage(target_folder)
 				self.messagebox.close()
 				self.close()
+		if tarxzfile:
+			if os.system('/bin/tar' + ' xpJf %s -C %s' % (tarxzfile[0], target_folder)) != 0:
+				if not os.path.exists(target_folder + "/usr/bin/enigma2"):
+					self.showError(_("Error unpacking rootfs"))
+					Console().ePopen("rm -rf %s" % tmp_folder)
+				else:
+					self.afterInstallImage(target_folder)
+					Console().ePopen("rm -f %s" % source_file)
+					Console().ePopen("rm -rf %s" % tmp_folder)
+					self.messagebox.close()
+					self.close(target_folder)
+			else:
+				self.showError(_("Error unpacking rootfs"))
+				Console().ePopen("rm -rf %s" % tmp_folder)
 		elif self.installImage(tmp_folder, target_folder, kernel_target_file, tmp_folder):
-			os.system(OMB_RM_BIN + ' -f ' + source_file)
+			Console().ePopen("rm -f %s" % source_file)
+			Console().ePopen("rm -rf %s" % tmp_folder)
 			self.messagebox.close()
-			self.close()
-
-		os.system(OMB_RM_BIN + ' -rf ' + tmp_folder)
+			self.close(target_folder)
+		else:
+			Console().ePopen("rm -rf %s" % tmp_folder)
 
 	def installImage(self, src_path, dst_path, kernel_dst_path, tmp_folder):
 		if "ubi" in OMB_GETIMAGEFILESYSTEM:
@@ -275,12 +235,12 @@ class OMBManagerInstall(Screen):
 		rootfs_path = base_path + '/' + OMB_GETMACHINEROOTFILE
 		kernel_path = base_path + '/' + OMB_GETMACHINEKERNELFILE
 
-		if os.system(OMB_TAR_BIN + ' jxf %s -C %s' % (rootfs_path, dst_path)) != 0:
+		if os.system('tar jxf %s -C %s' % (rootfs_path, dst_path)) != 0:
 			self.showError(_("Error unpacking rootfs"))
 			return False
 
 		if os.path.exists(dst_path + '/usr/bin/enigma2'):
-			if os.system(OMB_CP_BIN + ' ' + kernel_path + ' ' + kernel_dst_path) != 0:
+			if os.system('cp ' + kernel_path + ' ' + kernel_dst_path) != 0:
 				self.showError(_("Error copying kernel"))
 				return False
 
@@ -301,42 +261,42 @@ class OMBManagerInstall(Screen):
 		kernel_path = base_path + '/' + OMB_GETMACHINEKERNELFILE
 		jffs2_path = src_path + '/jffs2'
 
-		if os.path.exists(OMB_UNJFFS2_BIN):
-			if os.system("%s %s %s" % (OMB_UNJFFS2_BIN, rootfs_path, jffs2_path)) != 0:
+		if os.path.exists('/usr/bin/unjffs2'):
+			if os.system("unjffs2 %s %s" % (rootfs_path, jffs2_path)) != 0:
 				self.showError(_("Error unpacking rootfs"))
 				rc = False
 
 			if os.path.exists(jffs2_path + '/usr/bin/enigma2'):
-				if os.system(OMB_CP_BIN + ' -rp ' + jffs2_path + '/* ' + dst_path) != 0:
+				if os.system('cp -rp ' + jffs2_path + '/* ' + dst_path) != 0:
 					self.showError(_("Error copying unpacked rootfs"))
 					rc = False
-				if os.system(OMB_CP_BIN + ' ' + kernel_path + ' ' + kernel_dst_path) != 0:
+				if os.system('cp ' + kernel_path + ' ' + kernel_dst_path) != 0:
 					self.showError(_("Error copying kernel"))
 					rc = False
 		else:
-			os.system(OMB_MODPROBE_BIN + ' loop')
-			os.system(OMB_MODPROBE_BIN + ' mtdblock')
-			os.system(OMB_MODPROBE_BIN + ' block2mtd')
-			os.system(OMB_MKNOD_BIN + ' ' + mtdfile + ' b 31 0')
-			os.system(OMB_LOSETUP_BIN + ' /dev/loop0 ' + rootfs_path)
-			os.system(OMB_ECHO_BIN + ' "/dev/loop0,%s" > /sys/module/block2mtd/parameters/block2mtd' % self.esize)
-			os.system(OMB_MOUNT_BIN + ' -t jffs2 ' + mtdfile + ' ' + jffs2_path)
+			Console().ePopen("modprobe loop")
+			Console().ePopen("modprobe mtdblock")
+			Console().ePopen("modprobe block2mtd")
+			Console().ePopen("mknod %s b 31 0" % mtdfile)
+			Console().ePopen("losetup /dev/loop0 %s" % rootfs_path)
+			Console().ePopen('echo "/dev/loop0,%s" > /sys/module/block2mtd/parameters/block2mtd' % self.esize)
+			Console().ePopen("mount -t jffs2 %s %s" % (mtdfile, jffs2_path))
 
 			if os.path.exists(jffs2_path + '/usr/bin/enigma2'):
-				if os.system(OMB_CP_BIN + ' -rp ' + jffs2_path + '/* ' + dst_path) != 0:
+				if os.system('cp -rp ' + jffs2_path + '/* ' + dst_path) != 0:
 					self.showError(_("Error copying unpacked rootfs"))
 					rc = False
-				if os.system(OMB_CP_BIN + ' ' + kernel_path + ' ' + kernel_dst_path) != 0:
+				if os.system('cp ' + kernel_path + ' ' + kernel_dst_path) != 0:
 					self.showError(_("Error copying kernel"))
 					rc = False
 			else:
 				self.showError(_("Generic error in unpack process"))
 				rc = False
 
-			os.system(OMB_UMOUNT_BIN + ' ' + jffs2_path)
-			os.system(OMB_RMMOD_BIN + ' block2mtd')
-			os.system(OMB_RMMOD_BIN + ' mtdblock')
-			os.system(OMB_RMMOD_BIN + ' loop')
+			Console().ePopen("umount %s" % jffs2_path)
+			Console().ePopen("rmmod block2mtd")
+			Console().ePopen("rmmod mtdblock")
+			Console().ePopen("rmmod loop")
 
 		return rc
 
@@ -354,53 +314,48 @@ class OMBManagerInstall(Screen):
 		ubi_path = src_path + '/ubi'
 
 		# This is idea from EGAMI Team to handle universal UBIFS unpacking - used only for INI-HDp model
-		if OMB_GETMACHINEBUILD in ('inihdp'):
-			if fileExists("/usr/lib/enigma2/python/Plugins/Extensions/OpenMultiboot/ubi_reader/ubi_extract_files.py"):
-				ubifile = "/usr/lib/enigma2/python/Plugins/Extensions/OpenMultiboot/ubi_reader/ubi_extract_files.py"
+		if OMB_GETBOXTYPE in ("xpeedlx3", "sezammarvel", "mbultra", "beyonwizt4", "atemionemesis"):
+			if path.isdir("/usr/lib64"):
+				ubifile = "/usr/lib64/enigma2/python/Plugins/Extensions/OpenMultiboot/ubi_reader/ubi_extract_files.pyo"
 			else:
 				ubifile = "/usr/lib/enigma2/python/Plugins/Extensions/OpenMultiboot/ubi_reader/ubi_extract_files.pyo"
-			cmd = "chmod 755 " + ubifile
-			rc = os.system(cmd)
-			cmd = "python " + ubifile + " " + rootfs_path + " -o " + ubi_path
-			rc = os.system(cmd)
-			os.system(OMB_CP_BIN + ' -rp ' + ubi_path + '/rootfs/* ' + dst_path)
-			rc = os.system(cmd)
-			cmd = ('chmod -R +x ' + dst_path)
-			rc = os.system(cmd)
-			cmd = 'rm -rf ' + ubi_path
-			rc = os.system(cmd)
-			os.system(OMB_CP_BIN + ' ' + kernel_path + ' ' + kernel_dst_path)
+			Console().ePopen("chmod 755 %s" % ubifile)
+			Console().ePopen("python %s %s -o %s" % (ubifile, rootfs_path, ubi_path))
+			Console().ePopen("cp -rp %s/rootfs/* %s" % (ubi_path, dst_path))
+			Console().ePopen("chmod -R +x %s" % dst_path)
+			Console().ePopen("rm -rf %s" % ubi_path)
+			Console().ePopen("cp %s %s" % (kernel_path, kernel_dst_path))
 			self.dirtyHack(dst_path)
 			return True
 
 		virtual_mtd = tmp_folder + '/virtual_mtd'
-		os.system(OMB_MODPROBE_BIN + ' nandsim cache_file=' + virtual_mtd + ' ' + self.nandsim_parm)
+		Console().ePopen("modprobe nandsim cache_file=%s %s" % (virtual_mtd, self.nandsim_parm))
 		if not os.path.exists('/dev/mtd' + mtd):
-			os.system('rmmod nandsim')
+			Console().ePopen('rmmod nandsim')
 			self.showError(_("Cannot create virtual MTD device"))
 			return False
 
 		if not os.path.exists('/dev/mtdblock' + mtd):
-			os.system(OMB_DD_BIN + ' if=' + rootfs_path + ' of=/dev/mtd' + mtd + ' bs=2048')
+			Console().ePopen("dd if=%s of=/dev/mtd%s bs=2048" % (rootfs_path, mtd))
 		else:
-			os.system(OMB_DD_BIN + ' if=' + rootfs_path + ' of=/dev/mtdblock' + mtd + ' bs=2048')
-		os.system(OMB_UBIATTACH_BIN + ' /dev/ubi_ctrl -m ' + mtd + ' -O ' + self.vid_offset)
-		os.system(OMB_MOUNT_BIN + ' -t ubifs ubi1_0 ' + ubi_path)
+			Console().ePopen("dd if=%s of=/dev/mtdblock%s bs=2048" % (rootfs_path, mtd))
+		Console().ePopen("ubiattach /dev/ubi_ctrl -m %s -O %s" % (mtd, self.vid_offset))
+		Console().ePopen("mount -t ubifs ubi1_0 %s" % ubi_path)
 
 		if os.path.exists(ubi_path + '/usr/bin/enigma2'):
-			if os.system(OMB_CP_BIN + ' -rp ' + ubi_path + '/* ' + dst_path) != 0:
+			if os.system('cp -rp ' + ubi_path + '/* ' + dst_path) != 0:
 				self.showError(_("Error copying unpacked rootfs"))
 				rc = False
-			if os.system(OMB_CP_BIN + ' ' + kernel_path + ' ' + kernel_dst_path) != 0:
+			if os.system('cp ' + kernel_path + ' ' + kernel_dst_path) != 0:
 				self.showError(_("Error copying kernel"))
 				rc = False
 		else:
 			self.showError(_("Generic error in unpack process"))
 			rc = False
 
-		os.system(OMB_UMOUNT_BIN + ' ' + ubi_path)
-		os.system(OMB_UBIDETACH_BIN + ' -m ' + mtd)
-		os.system(OMB_RMMOD_BIN + ' nandsim')
+		Console().ePopen("umount %s" % ubi_path)
+		Console().ePopen("ubidetach -m %s" % mtd)
+		Console().ePopen("rmmod nandsim")
 
 		self.dirtyHack(dst_path)
 
@@ -413,7 +368,7 @@ class OMBManagerInstall(Screen):
 		nfidata = open(nfifile, 'r')
 		header = nfidata.read(32)
 		if header[:3] != 'NFI':
-			print 'Sorry, old NFI format deteced'
+			print('Sorry, old NFI format deteced')
 			nfidata.close()
 			return False
 		else:
@@ -421,8 +376,8 @@ class OMBManagerInstall(Screen):
 			if header[:4] == 'NFI3':
 				machine_type = 'dm7020hdv2'
 
-		print 'Dreambox image type: %s' % machine_type
-		if machine_type == 'dm800' or machine_type == 'dm500hd' or machine_type == 'dm800se':
+		print('Dreambox image type: %s' % machine_type)
+		if machine_type in ('dm800', 'dm500hd', 'dm800se'):
 			self.esize = '0x4000,0x200'
 			self.vid_offset = '512'
 			bs = 512
@@ -446,18 +401,18 @@ class OMBManagerInstall(Screen):
 			bso = 2112
 
 		(total_size, ) = struct.unpack('!L', nfidata.read(4))
-		print 'Total image size: %s Bytes' % total_size
+		print('Total image size: %s Bytes' % total_size)
 
 		part = 0
 		while nfidata.tell() < total_size:
 			(size, ) = struct.unpack('!L', nfidata.read(4))
-			print 'Processing partition # %d size %d Bytes' % (part, size)
+			print('Processing partition # %d size %d Bytes' % (part, size))
 			output_names = {2: 'kernel.bin', 3: 'rootfs.bin'}
 			if part not in output_names:
 				nfidata.seek(size, 1)
-				print 'Skipping %d data...' % size
+				print('Skipping %d data...' % size)
 			else:
-				print 'Extracting %s with %d blocksize...' % (output_names[part], bs)
+				print('Extracting %s with %d blocksize...' % (output_names[part], bs))
 				output_filename = extractdir + '/' + output_names[part]
 				if os.path.exists(output_filename):
 					os.remove(output_filename)
@@ -472,7 +427,7 @@ class OMBManagerInstall(Screen):
 			part = part + 1
 
 		nfidata.close()
-		print 'Extracting %s to %s Finished!' % (nfifile, extractdir)
+		print('Extracting %s to %s Finished!' % (nfifile, extractdir))
 
 		return True
 
@@ -483,21 +438,37 @@ class OMBManagerInstall(Screen):
 # But this is not a perfect world and we have to help OMB to
 # prevent funny cases for non standard images.
 # My apologies to Sandro for this bad code.
-
-		if not os.path.exists('/usr/lib/python2.7/boxbranding.so'):
-			os.system("ln -s /usr/lib/enigma2/python/boxbranding.so /usr/lib/python2.7/boxbranding.so")
-		if os.path.exists(dst_path + '/usr/lib/python2.7/boxbranding.py'):
-			os.system("cp /usr/lib/enigma2/python/boxbranding.so " + dst_path + "/usr/lib/python2.7/boxbranding.so")
-			os.system("rm -f " + dst_path + '/usr/lib/python2.7/boxbranding.py')
-		if not os.path.exists(dst_path + "/usr/lib/python2.7/subprocess.pyo"):
-			os.system("cp /usr/lib/python2.7/subprocess.pyo " + dst_path + "/usr/lib/python2.7/subprocess.pyo")
-# openmultiboot installed in the multiboot image. where the init will go ?
+		try:
+			for pyver in ["2.7", "3.9"]:
+				if os.path.exists('/usr/lib/python' + pyver + '/boxbranding.so'):
+					if not os.path.exists('/usr/lib/python' + pyver + '/boxbranding.so'):
+						os.system("ln -s /usr/lib/enigma2/python/boxbranding.so /usr/lib/python' + pyver  + '/boxbranding.so")
+					if os.path.exists(dst_path + '/usr/lib/python' + pyver + '/boxbranding.pyo'):
+						os.system("cp /usr/lib/enigma2/python/boxbranding.so " + dst_path + "/usr/lib/python' + pyver  + '/boxbranding.so")
+						os.system("rm -f " + dst_path + '/usr/lib/python' + pyver + '/boxbranding.pyo')
+					if not os.path.exists(dst_path + "/usr/lib/python" + pyver + "/subprocess.pyo"):
+						os.system("cp /usr/lib/python" + pyver + "/subprocess.pyo " + dst_path + "/usr/lib/python" + pyver + "/subprocess.pyo")
+		except:
+			pass
+		try:
+			for pyver in ["2.7", "3.9"]:
+				if os.path.exists('/usr/lib64/python' + pyver + '/boxbranding.so'):
+					if not os.path.exists('/usr/lib64/python' + pyver + '/boxbranding.so'):
+						os.system("ln -s /usr/lib64/enigma2/python/boxbranding.so /usr/lib64/python' + pyver  + '/boxbranding.so")
+					if os.path.exists(dst_path + '/usr/lib64/python' + pyver + '/boxbranding.pyo'):
+						os.system("cp /usr/lib64/enigma2/python/boxbranding.so " + dst_path + "/usr/lib64/python' + pyver  + '/boxbranding.so")
+						os.system("rm -f " + dst_path + '/usr/lib64/python' + pyver + '/boxbranding.pyo')
+					if not os.path.exists(dst_path + "/usr/lib64/python" + pyver + "/subprocess.pyo"):
+						os.system("cp /usr/lib64/python" + pyver + "/subprocess.pyo " + dst_path + "/usr/lib64/python" + pyver + "/subprocess.pyo")
+		except:
+			pass
+# OpenMultiboot installed in the multiboot image. where the init will go ?
 		if os.path.exists(dst_path + '/sbin/open_multiboot'):
-			os.system("rm -f " + dst_path + '/sbin/open_multiboot')
-			os.system("rm -f " + dst_path + '/sbin/open-multiboot-branding-helper.py')
-			os.system("rm -f " + dst_path + '/etc/ipk-postinsts/*-openmultiboot')
-# We can't create the init symlink because it will be overwrited by openmultiboot
-			os.system('ln -sfn /sbin/init.sysvinit ' + dst_path + '/sbin/open_multiboot')
+			Console().ePopen("rm -f %s/sbin/open_multiboot" % dst_path)
+			Console().ePopen("rm -f %s/sbin/open-multiboot-branding-helper.pyo" % dst_path)
+			Console().ePopen("rm -f %s/etc/ipk-postinsts/*-OpenMultiboot" % dst_path)
+# We can't create the init symlink because it will be overwrited by OpenMultiboot
+			Console().ePopen("ln -sfn /sbin/init.sysvinit %s/sbin/open_multiboot" % dst_path)
 
 	def afterInstallImage(self, dst_path):
 		fix = False
@@ -517,6 +488,6 @@ class OMBManagerInstall(Screen):
 				import fileinput
 				for line in fileinput.input(file, inplace=True):
 					if 'mount -t tmpfs -o size=64k tmpfs /media' in line:
-						print "mountpoint -q \"/media\" || mount -t tmpfs -o size=64k tmpfs /media"
+						print("mountpoint -q \"/media\" || mount -t tmpfs -o size=64k tmpfs /media")
 					else:
-						print line.rstrip()
+						print(line.rstrip())

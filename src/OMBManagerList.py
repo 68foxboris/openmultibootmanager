@@ -34,7 +34,7 @@ from Components.Sources.List import List
 from Components.Label import Label
 from Components.config import getConfigListEntry, config, ConfigYesNo, NoSave
 
-from OMBManagerInstall import OMBManagerInstall, OMB_RM_BIN, BRANDING
+from OMBManagerInstall import OMBManagerInstall, OMB_GETBOXTYPE
 from OMBManagerAbout import OMBManagerAbout
 from OMBManagerCommon import OMB_DATA_DIR, OMB_UPLOAD_DIR
 from OMBManagerLocale import _
@@ -42,6 +42,8 @@ from OMBManagerLocale import _
 from enigma import eTimer
 
 import os
+from os import path
+from Components.Console import Console
 
 
 class OMBManagerList(Screen):
@@ -122,7 +124,7 @@ class OMBManagerList(Screen):
 					font="Regular;18" />
 
 			<ePixmap name="red"
-					 pixmap="skin_default/buttons/red.png"
+					 pixmap="buttons/red.png"
 					 position="0,360"
 					 size="140,40"
 					 zPosition="4"
@@ -130,7 +132,7 @@ class OMBManagerList(Screen):
 					 alphatest="on" />
 
 			<ePixmap name="green"
-					 pixmap="skin_default/buttons/green.png"
+					 pixmap="buttons/green.png"
 					 position="140,360"
 					 size="140,40"
 					 zPosition="4"
@@ -138,7 +140,7 @@ class OMBManagerList(Screen):
 					 alphatest="on" />
 
 			<ePixmap name="yellow"
-					 pixmap="skin_default/buttons/yellow.png"
+					 pixmap="buttons/yellow.png"
 					 position="280,360"
 					 size="140,40"
 					 zPosition="4"
@@ -146,7 +148,7 @@ class OMBManagerList(Screen):
 					 alphatest="on" />
 
 			<ePixmap name="blue"
-					 pixmap="skin_default/buttons/blue.png"
+					 pixmap="buttons/blue.png"
 					 position="420,360"
 					 size="140,40"
 					 zPosition="4"
@@ -165,6 +167,8 @@ class OMBManagerList(Screen):
 		self.data_dir = mount_point + '/' + OMB_DATA_DIR
 		self.upload_dir = mount_point + '/' + OMB_UPLOAD_DIR
 		self.select = None
+		self.dynamic_loader = None
+		self.running_box_type = None
 
 		self["label1"] = Label(_("Current Running Image:"))
 		self["label2"] = Label("")
@@ -176,10 +180,7 @@ class OMBManagerList(Screen):
 		self["key_red"] = Button(_('Rename'))
 		self["key_yellow"] = Button()
 		self["key_blue"] = Button(_('Menu'))
-		if BRANDING:
-			self["key_green"] = Button(_('Install'))
-		else:
-			self["key_green"] = Button('')
+		self["key_green"] = Button(_('Install'))
 		self["actions"] = ActionMap(["OkCancelActions", "ColorActions", "MenuActions"],
 		{
 			"cancel": self.close,
@@ -191,42 +192,51 @@ class OMBManagerList(Screen):
 			"menu": self.showMen,
 		})
 
-	def isCompatible(self, base_path):
-		running_box_type = "none"
-		e2_path = '/usr/lib/enigma2/python'
+	def getDynamicLoader(self, base_path):
+		p = Popen("/usr/bin/strings " + base_path + "/bin/echo", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True, universal_newlines=True)
+		target_dynamic_loader = base_path + p.stdout.read().split("\n")[0].strip()
+		#print ("DYNAMIC_LOADER:", target_dynamic_loader)
+		self.dynamic_loader = target_dynamic_loader
+
+	def setRunningBoxType(self):
+		self.running_box_type = OMB_GETBOXTYPE
+		if path.isdir("/usr/lib64"):
+			e2_path = base_path + '/usr/lib64/enigma2/python'
+		else:
+			e2_path = base_path + '/usr/lib/enigma2/python'
 		if os.path.exists(e2_path + '/boxbranding.so'):
-			helper = os.path.dirname("/usr/bin/python " + os.path.abspath(__file__)) + "/open-multiboot-branding-helper.py"
-			fin, fout = os.popen4(helper + " " + e2_path + " box_type")
-			running_box_type = fout.read().strip()
-
-		e2_path = base_path + '/usr/lib/enigma2/python'
-		if os.path.exists(e2_path + '/boxbranding.so'):
-			helper = os.path.dirname("/usr/bin/python " + os.path.abspath(__file__)) + "/open-multiboot-branding-helper.py"
-			fin, fout = os.popen4(helper + " " + e2_path + " brand_oem")
-			brand_oem = fout.read().strip()
-			fin, fout = os.popen4(helper + " " + e2_path + " box_type")
-			box_type = fout.read().strip()
-
-			if brand_oem == "vuplus" and box_type[0:2] != "vu":
-				box_type = "vu" + box_type
-				print "OMB: buggy image, fixed box_type is %s" % box_type
-
-			if brand_oem == 'formuler':
-				if running_box_type != "formuler4turbo" or box_type != "formuler4turbo":
-					running_box_type = running_box_type[:9]
-					box_type = box_type[:9]
-
-			print "DEBUG", base_path, running_box_type, box_type
-			return (running_box_type == box_type)
+			helper = os.path.dirname("/usr/bin/python " + os.path.abspath(__file__)) + "/open-multiboot-branding-helper.pyo"
+			p = Popen(helper + " " + e2_path + " box_type", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True, universal_newlines=True)
+			self.running_box_type = p.stdout.read().strip()
+			return True
 
 		try:
-			if running_box_type is None:
-				running_box_type = open('/proc/stb/info/boxtype', 'r').read().strip()
+			if self.running_box_type is None:
+				self.running_box_type = open('/proc/enigma/model', 'r').read().strip()
+		except:
+			pass
+		return False
+
+	def isCompatible(self, base_path):
+		box_type = OMB_GETBOXTYPE
+		if path.isdir("/usr/lib64"):
+			e2_path = base_path + '/usr/lib64/enigma2/python'
+			usrlib_path = '/usr/lib64'
+		else:
+			e2_path = base_path + '/usr/lib/enigma2/python'
+			usrlib_path = '/usr/lib'
+		if os.path.exists(e2_path + '/boxbranding.so'):
+			helper = "LC_ALL=C LD_LIBRARY_PATH=" + base_path + "/lib:" + base_path + usrlib_path + " " + self.dynamic_loader + " " + base_path + "/usr/bin/python " + os.path.dirname(os.path.abspath(__file__)) + "/open-multiboot-branding-helper.pyo"
+			p = Popen(helper + " " + e2_path + " box_type", shell=True, stdin=PIPE, stdout=PIPE, stderr=STDOUT, close_fds=True, universal_newlines=True)
+			box_type = p.stdout.read().strip()
+
+			return (self.running_box_type == box_type)
+		try:
 			archconffile = "%s/etc/opkg/arch.conf" % base_path
 			with open(archconffile, "r") as arch:
 				for line in arch:
 					box_type = line.split()[1]
-					if running_box_type == box_type or running_box_type in line:
+					if self.running_box_type == box_type or self.running_box_type in line:
 						return True
 		except:
 			pass
@@ -236,10 +246,15 @@ class OMBManagerList(Screen):
 	def guessImageTitle(self, base_path, identifier):
 		image_distro = ""
 		image_version = ""
+		if path.isdir("/usr/lib64"):
+			e2_path = base_path + '/usr/lib64/enigma2/python'
+			usrlib_path = '/usr/lib64'
+		else:
+			e2_path = base_path + '/usr/lib/enigma2/python'
+			usrlib_path = '/usr/lib'
 
-		e2_path = base_path + '/usr/lib/enigma2/python'
 		if os.path.exists(e2_path + '/boxbranding.so'):
-			helper = os.path.dirname("/usr/bin/python " + os.path.abspath(__file__)) + "/open-multiboot-branding-helper.py"
+			helper = "LC_ALL=C LD_LIBRARY_PATH=" + base_path + "/lib:" + base_path + usrlib_path + " " + self.dynamic_loader + " " + base_path + "/usr/bin/python " + os.path.dirname(os.path.abspath(__file__)) + "/open-multiboot-branding-helper.pyo"
 			fin, fout = os.popen4(helper + " " + e2_path + " image_distro")
 			image_distro = fout.read().strip()
 			fin, fout = os.popen4(helper + " " + e2_path + " image_version")
@@ -251,9 +266,7 @@ class OMBManagerList(Screen):
 			return identifier
 
 	def imageTitleFromLabel(self, file_entry):
-		f = open(self.data_dir + '/' + file_entry)
-		label = f.readline().strip()
-		f.close()
+		label = open(self.data_dir + '/' + file_entry).readline().strip()
 		return label
 
 	def populateImagesList(self):
@@ -272,6 +285,9 @@ class OMBManagerList(Screen):
 			'path': '/'
 		})
 		self.images_list.append(self.images_entries[0]['label'])
+
+		self.setRunningBoxType()
+
 		if os.path.exists(self.data_dir):
 			for file_entry in os.listdir(self.data_dir):
 				if not os.path.isdir(self.data_dir + '/' + file_entry):
@@ -279,6 +295,8 @@ class OMBManagerList(Screen):
 
 				if file_entry[0] == '.':
 					continue
+
+				self.getDynamicLoader(self.data_dir + '/' + file_entry)
 
 				if not self.isCompatible(self.data_dir + '/' + file_entry):
 					continue
@@ -340,12 +358,9 @@ class OMBManagerList(Screen):
 	def confirmNextbootCB(self, ret):
 		if ret:
 			image = self.images_entries[self.select]['identifier']
-			print "[OMB] set nextboot to %s" % image
+			print("[OMB] set nextboot to %s" % image)
 			file_entry = self.data_dir + '/.nextboot'
-			f = open(file_entry, 'w')
-			f.write(image)
-			f.close()
-
+			open(file_entry, 'w').write(image)
 			self.session.openWithCallback(self.confirmRebootCB, MessageBox, _('Do you want to reboot now ?'), MessageBox.TYPE_YESNO)
 
 	def confirmRebootCB(self, ret):
@@ -381,9 +396,7 @@ class OMBManagerList(Screen):
 			else:
 				file_entry = self.data_dir + '/.label_' + renameimage['identifier']
 
-			f = open(file_entry, 'w')
-			f.write(name)
-			f.close()
+			open(file_entry, 'w').write(name)
 			self.refresh()
 
 	def deleteConfirm(self, confirmed):
@@ -395,9 +408,9 @@ class OMBManagerList(Screen):
 
 	def deleteImage(self):
 		self.timer.stop()
-		os.system(OMB_RM_BIN + ' -rf ' + self.entry_to_delete['path'])
-		os.system(OMB_RM_BIN + ' -f ' + self.entry_to_delete['kernelbin'])
-		os.system(OMB_RM_BIN + ' -f ' + self.entry_to_delete['labelfile'])
+		Console().ePopen("rm -rf %s" % self.entry_to_delete['path'])
+		Console().ePopen("rm -f %s" % self.entry_to_delete['kernelbin'])
+		Console().ePopen("rm -f %s" % self.entry_to_delete['labelfile'])
 		self.messagebox.close()
 		self.refresh()
 
@@ -412,8 +425,6 @@ class OMBManagerList(Screen):
 				self.session.openWithCallback(self.deleteConfirm, MessageBox, _("Do you want to delete %s?") % self.entry_to_delete['label'], MessageBox.TYPE_YESNO)
 
 	def keyInstall(self):
-		if not BRANDING:
-			return
 		upload_list = []
 		if os.path.exists(self.upload_dir):
 			for file_entry in os.listdir(self.upload_dir):
@@ -438,7 +449,7 @@ class OMBManagerPreferences(Screen, ConfigListScreen):
 	skin = """
 	<screen position="center,center" size="800,340" title="Preferences">
 		<widget name="config" position="10,20" size="780,280" scrollbarMode="showOnDemand" />
-		<ePixmap pixmap="skin_default/buttons/red.png" position="330,270" size="140,40" alphatest="on" />
+		<ePixmap pixmap="buttons/red.png" position="330,270" size="140,40" alphatest="on" />
 		<widget name="key_red" position="330,270" zPosition="1" size="140,40" font="Regular;20" halign="center" valign="center" backgroundColor="#9f1313" transparent="1" />
 	</screen>"""
 
@@ -471,7 +482,5 @@ class OMBManagerPreferences(Screen, ConfigListScreen):
 				os.remove(self.data_dir + '/.bootmenu.lock')
 		else:
 			if not os.path.isfile(self.data_dir + '/.bootmenu.lock'):
-				cmd = "touch " + self.data_dir + '/.bootmenu.lock'
-				os.system(cmd)
-
+				Console().ePopen("touch %s/.bootmenu.lock" % self.data_dir)
 		self.close()

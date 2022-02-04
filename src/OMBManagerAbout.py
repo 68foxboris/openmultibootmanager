@@ -26,8 +26,9 @@ from Screens.MessageBox import MessageBox
 from Components.ActionMap import ActionMap
 from Components.Label import Label
 
-from OMBManagerCommon import OMB_DATA_DIR, OMB_UPLOAD_DIR, OMB_TMP_DIR, OMB_MANAGER_VERION
+from OMBManagerCommon import OMB_MANAGER_VERSION
 from OMBManagerLocale import _
+from OMBManagerInstall import OMB_GETBOXTYPE
 
 
 class OMBManagerAbout(Screen):

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 #############################################################
 # ubi_reader
 # (c) 2013 Jason Pruitt (jrspruitt@gmail.com)
@@ -41,7 +41,7 @@ def extract_files(ubifs, out_path, perms=False):
         for dent in inodes[1]['dent']:
             output.dents(ubifs, inodes, dent, out_path, perms)
 
-    except Exception, e:
+    except Exception as e:
         import traceback
         ubifs.log.write('%s' % e)
         traceback.print_exc()

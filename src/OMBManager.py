@@ -1,3 +1,5 @@
+#!/usr/bin/python
+# -*- coding: utf-8 -*-
 #############################################################################
 #
 # Copyright (C) 2014 Impex-Sat Gmbh & Co.KG
@@ -26,12 +28,13 @@ from Screens.MessageBox import MessageBox
 
 from OMBManagerList import OMBManagerList
 from OMBManagerCommon import OMB_MAIN_DIR, OMB_DATA_DIR, OMB_UPLOAD_DIR
-from OMBManagerInstall import OMB_GETIMAGEFILESYSTEM, BRANDING, OMB_UNJFFS2_BIN
+from OMBManagerInstall import OMB_GETIMAGEFILESYSTEM, OMB_GETBRANDOEM
 from OMBManagerLocale import _
 
 from enigma import eTimer
 
 import os
+from Components.Console import Console
 
 
 class OMBManagerInit:
@@ -81,7 +84,7 @@ class OMBManagerInit:
 # so we can disable it in open multiboot postinst.
 # In this way we will be sure to have not open_multiboot init in mb installed images.
 		if os.path.isfile('/sbin/open_multiboot'):
-			os.system("ln -sfn /sbin/open_multiboot /sbin/init")
+			Console().ePopen("ln -sfn /sbin/open_multiboot /sbin/init")
 
 		self.session.open(OMBManagerList, partition.mountpoint)
 

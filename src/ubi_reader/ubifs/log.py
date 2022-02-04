@@ -1,4 +1,5 @@
-#!/usr/bin/env python
+#!/usr/bin/python
+from __future__ import print_function
 #############################################################
 # ubi_reader/ubifs
 # (c) 2013 Jason Pruitt (jrspruitt@gmail.com)
@@ -37,7 +38,7 @@ class log():
                     f.write('%s\n' % s)
                 f.close()
             else:
-                print '%s' % s
+                print('%s' % s)
 
         if self.exit_on_except:
             sys.exit()

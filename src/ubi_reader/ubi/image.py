@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+#!/usr/bin/python
 #############################################################
 # ubi_reader/ubi
 # (c) 2013 Jason Pruitt (jrspruitt@gmail.com)
